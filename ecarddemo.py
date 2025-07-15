@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 import random
+import winsound
 
 # Paths to card images
 card_paths = {
@@ -19,26 +20,49 @@ class ECardApp:
         # Store both PIL and Tk images for animation
         self.pil_images = {name: Image.open(path).resize((120, 180)) for name, path in card_paths.items()}
         self.card_images = {name: ImageTk.PhotoImage(self.pil_images[name]) for name in card_paths}
+        self.player_score = 0
+        self.cpu_score = 0
         self.show_role_selection()
 
     def show_role_selection(self):
         self.clear_screen()
+        # Modern background frame
+        bg_frame = tk.Frame(self.root, bg="#145a32")
+        bg_frame.pack(fill="both", expand=True)
 
-        title = tk.Label(self.root, text="Choose Your Role", font=("Arial", 18, "bold"))
-        title.pack(pady=20)
+        # Modern gold-accented title
+        title = tk.Label(bg_frame, text="Choose Your Role", font=("Arial", 28, "bold"), fg="#FFD700", bg="#145a32", pady=18)
+        title.pack(pady=(40, 10))
+        underline = tk.Frame(bg_frame, bg="#FFD700", height=3, width=320)
+        underline.pack(pady=(0, 30))
 
-        button_frame = tk.Frame(self.root)
-        button_frame.pack()
+        # Role selection buttons with images
+        button_frame = tk.Frame(bg_frame, bg="#145a32")
+        button_frame.pack(pady=10)
 
-        tk.Button(button_frame, text="Play as Emperor", font=("Arial", 14),
-                  command=lambda: self.start_game("Emperor"), width=20).pack(padx=20, pady=10)
+        # Emperor button
+        emperor_img = self.card_images["Emperor"]
+        emperor_btn = tk.Label(button_frame, image=emperor_img, text="Emperor", compound="top",
+                              font=("Arial", 16, "bold"), fg="#FFD700", bg="#222", bd=6, relief="ridge",
+                              padx=24, pady=18, cursor="hand2", highlightthickness=0)
+        emperor_btn.grid(row=0, column=0, padx=40)
+        emperor_btn.bind("<Enter>", lambda e: emperor_btn.config(bg="#333"))
+        emperor_btn.bind("<Leave>", lambda e: emperor_btn.config(bg="#222"))
+        emperor_btn.bind("<Button-1>", lambda e: (self.game.play_sound('click.wav') if hasattr(self, 'game') else None, self.start_game("Emperor", self.player_score, self.cpu_score)))
 
-        tk.Button(button_frame, text="Play as Slave", font=("Arial", 14),
-                  command=lambda: self.start_game("Slave"), width=20).pack(padx=20, pady=10)
+        # Slave button
+        slave_img = self.card_images["Slave"]
+        slave_btn = tk.Label(button_frame, image=slave_img, text="Slave", compound="top",
+                            font=("Arial", 16, "bold"), fg="#FFD700", bg="#222", bd=6, relief="ridge",
+                            padx=24, pady=18, cursor="hand2", highlightthickness=0)
+        slave_btn.grid(row=0, column=1, padx=40)
+        slave_btn.bind("<Enter>", lambda e: slave_btn.config(bg="#333"))
+        slave_btn.bind("<Leave>", lambda e: slave_btn.config(bg="#222"))
+        slave_btn.bind("<Button-1>", lambda e: (self.game.play_sound('click.wav') if hasattr(self, 'game') else None, self.start_game("Slave", self.player_score, self.cpu_score)))
 
-    def start_game(self, role):
+    def start_game(self, role, player_score=0, cpu_score=0):
         self.clear_screen()
-        self.game = ECardGame(self.root, self, role, self.card_images)
+        self.game = ECardGame(self.root, self, role, self.card_images, player_score, cpu_score)
 
     def clear_screen(self):
         for widget in self.root.winfo_children():
@@ -46,7 +70,7 @@ class ECardApp:
 
 
 class ECardGame:
-    def __init__(self, root, app, role, card_images):
+    def __init__(self, root, app, role, card_images, player_score=0, cpu_score=0):
         self.root = root
         self.role = role
         self.app = app
@@ -60,6 +84,9 @@ class ECardGame:
         self.chosen_player_card = None
         self.chosen_cpu_card = None
         self.history = []
+        self.player_score = player_score
+        self.cpu_score = cpu_score
+        self.game_over = False
 
         # Main layout frames
         self.main_frame = tk.Frame(root, bg="#145a32", bd=4, relief="ridge")  # Green felt background
@@ -89,6 +116,9 @@ class ECardGame:
 
         self.result_label = tk.Label(self.main_frame, text="", font=("Arial", 12), bg="#145a32", fg="white")
         self.result_label.pack(pady=10)
+        # Modern result banner
+        self.result_banner = tk.Label(self.main_frame, text="", font=("Arial", 18, "bold"), bg="#222", fg="#fff", pady=10, padx=20)
+        self.result_banner.pack(pady=(0, 10))
 
         self.button_frame = tk.Frame(self.main_frame)
         self.button_frame.pack(pady=10)
@@ -154,22 +184,67 @@ class ECardGame:
             self.card_labels.append(lbl)
 
     def create_sidebar(self):
-        tk.Label(self.sidebar, text="Card Status", font=("Arial", 14, "bold")).pack()
+        # Scoreboard badge
+        self.score_label = tk.Label(
+            self.sidebar,
+            text=self.get_score_text(),
+            font=("Arial", 18, "bold"),
+            fg="#333",
+            bg="#FFD700",
+            bd=2,
+            relief="ridge",
+            padx=18,
+            pady=6,
+            highlightthickness=0
+        )
+        self.score_label.pack(pady=(18, 18))
 
-        self.remaining_label = tk.Label(self.sidebar, text="", justify="left", font=("Arial", 11))
-        self.remaining_label.pack(pady=5)
+        # Button group frame
+        btn_group = tk.Frame(self.sidebar, bg="#f5f5f5")
+        btn_group.pack(pady=(0, 18), fill="x")
+        btn_style = {"font": ("Arial", 11), "bg": "#fff", "fg": "#333", "activebackground": "#FFD700", "activeforeground": "#222", "relief": "groove", "bd": 2, "padx": 8, "pady": 4, "highlightthickness": 0}
+        self.reset_score_btn = tk.Button(btn_group, text="Reset Score", command=lambda: (self.play_sound('click.wav'), self.reset_score()), **btn_style)
+        self.reset_score_btn.pack(side="left", padx=4, pady=6)
+        self.clear_history_btn = tk.Button(btn_group, text="Clear History", command=lambda: (self.play_sound('click.wav'), self.clear_history()), **btn_style)
+        self.clear_history_btn.pack(side="left", padx=4, pady=6)
+        self.change_role_btn = tk.Button(btn_group, text="Change Role", command=lambda: (self.play_sound('click.wav'), self.change_role()), **btn_style)
+        self.change_role_btn.pack(side="left", padx=4, pady=6)
 
-        tk.Label(self.sidebar, text="History", font=("Arial", 12, "bold")).pack(pady=5)
-        self.history_text = tk.Text(self.sidebar, width=35, height=15, state="disabled", font=("Courier", 10))
-        self.history_text.pack()
+        # Card status
+        tk.Label(self.sidebar, text="Card Status", font=("Arial", 14, "bold"), bg="#f5f5f5").pack(pady=(0, 2), fill="x")
+        self.remaining_label = tk.Label(self.sidebar, text="", justify="left", font=("Arial", 11), bg="#f5f5f5")
+        self.remaining_label.pack(pady=5, fill="x")
 
+        # History section
+        history_frame = tk.Frame(self.sidebar, bg="#fff", bd=2, relief="groove")
+        history_frame.pack(pady=(10, 0), padx=4, fill="both", expand=True)
+        tk.Label(history_frame, text="History", font=("Arial", 12, "bold"), bg="#fff").pack(pady=(4, 0))
+        self.history_text = tk.Text(history_frame, width=35, height=13, state="disabled", font=("Courier", 10), bg="#f9f9f9", bd=0, highlightthickness=0)
+        self.history_text.pack(padx=6, pady=6, fill="both", expand=True)
         self.update_sidebar()
 
-    def update_sidebar(self):
-        # Update remaining
-        remaining_text = f"Player cards: {len(self.player_hand)}\nCPU cards: {len(self.cpu_hand)}"
-        self.remaining_label.config(text=remaining_text)
+    def reset_score(self):
+        self.player_score = 0
+        self.cpu_score = 0
+        self.app.player_score = 0
+        self.app.cpu_score = 0
+        self.update_sidebar()
 
+    def clear_history(self):
+        self.history = []
+        self.update_sidebar()
+
+    def change_role(self):
+        self.app.show_role_selection()
+
+    def get_score_text(self):
+        return f"Player: {self.player_score}   CPU: {self.cpu_score}"
+
+    def update_sidebar(self):
+        # Update scoreboard
+        self.score_label.config(text=self.get_score_text())
+        # Update remaining
+        self.remaining_label.config(text=f"Player cards: {len(self.player_hand)}\nCPU cards: {len(self.cpu_hand)}")
         # Update history
         self.history_text.config(state="normal")
         self.history_text.delete(1.0, "end")
@@ -177,7 +252,15 @@ class ECardGame:
             self.history_text.insert("end", f"Round {i}: You → {p:<8} | CPU → {c:<8}\n")
         self.history_text.config(state="disabled")
 
+    def play_sound(self, filename):
+        try:
+            winsound.PlaySound(filename, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        except Exception:
+            pass
+
     def play_round(self, player_choice):
+        if self.game_over:
+            return
         if player_choice not in self.player_hand:
             messagebox.showinfo("Error", "Card already used!")
             return
@@ -189,6 +272,7 @@ class ECardGame:
         self.cpu_card_slot.config(image=self.card_images["Back"])
         self.result_label.config(text="Cards placed... flipping!")
         self.update_player_hand()  # Refresh hand after play
+        self.play_sound('flip.wav')
         self.root.after(1000, self.reveal_cards)
 
     def flip_card_animation(self, slot_label, from_card, to_card, callback=None, steps=8, delay=30):
@@ -218,6 +302,7 @@ class ECardGame:
             else:
                 slot_label.config(image=self.card_images[to_card])
                 slot_label.image = self.card_images[to_card]
+                self.play_sound('flip.wav')
                 if callback:
                     callback()
         animate()
@@ -242,18 +327,33 @@ class ECardGame:
         )
 
     def show_result(self, winner):
+        # Modern, minimal result banner instead of popup
+        self.game_over = False
         if winner == "Player":
-            messagebox.showinfo("Result", "🎉 You win the game!")
+            self.player_score += 1
+            self.app.player_score = self.player_score
+            self.update_sidebar()
+            self.show_result_banner("🎉 You win the game!", "#27ae60")
+            self.play_sound('win.wav')
             self.show_new_game_button()
+            self.game_over = True
         elif winner == "CPU":
-            messagebox.showinfo("Result", "💀 CPU wins the game!")
+            self.cpu_score += 1
+            self.app.cpu_score = self.cpu_score
+            self.update_sidebar()
+            self.show_result_banner("💀 CPU wins the game!", "#c0392b")
+            self.play_sound('lose.wav')
             self.show_new_game_button()
+            self.game_over = True
         else:
-            messagebox.showinfo("Result", "⚖️ Draw! Continue to next round...")
-
+            self.update_sidebar()
+            self.show_result_banner("⚖️ Draw! Continue to next round...", "#FFD700")
+            self.play_sound('draw.wav')
         if not self.player_hand or not self.cpu_hand:
-            messagebox.showinfo("Result", "🃏 All cards used. It's a draw.")
+            self.show_result_banner("🃏 All cards used. It's a draw.", "#888")
+            self.play_sound('draw.wav')
             self.show_new_game_button()
+            self.game_over = True
 
     def determine_winner(self, card1, card2):
         rules = {
@@ -274,9 +374,17 @@ class ECardGame:
 
     def show_new_game_button(self):
         btn = tk.Button(self.main_frame, text="Play Again", font=("Arial", 12, "bold"), bg="#4CAF50", fg="white",
-                        command=self.app.show_role_selection)
-        btn.pack(pady=20)  
-    
+                        command=lambda: (self.play_sound('click.wav'), self.play_again()))
+        btn.pack(pady=20)
+
+    def play_again(self):
+        # Start a new game with the same roles and keep the score by recreating the ECardGame instance
+        self.game_over = False
+        self.app.start_game(self.role, self.app.player_score, self.app.cpu_score)
+
+    def show_result_banner(self, text, color):
+        self.result_banner.config(text=text, fg=color, bg="#222")
+        self.result_banner.after(2500, lambda: self.result_banner.config(text=""))
 
 
 if __name__ == "__main__":
