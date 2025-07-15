@@ -4,13 +4,22 @@ from PIL import Image, ImageTk
 import random
 import winsound
 import pygame
+import sys
+import os
+
+# Helper for PyInstaller compatibility
+def resource_path(relative_path):
+    base_path = getattr(sys, '_MEIPASS', None)
+    if base_path:
+        return os.path.join(base_path, relative_path)
+    return os.path.join(os.path.abspath('.'), relative_path)
 
 # Paths to card images
 card_paths = {
-    "Emperor": r"D:\projects\Emperor-Slave-card-game\emperor.jpg",
-    "Citizen": r"D:\projects\Emperor-Slave-card-game\citizen.jpg",
-    "Slave": r"D:\projects\Emperor-Slave-card-game\slave.jpg",
-    "Back": r"D:\projects\Emperor-Slave-card-game\back.jpg"
+    "Emperor": resource_path("emperor.jpg"),
+    "Citizen": resource_path("citizen.jpg"),
+    "Slave": resource_path("slave.jpg"),
+    "Back": resource_path("back.jpg")
 }
 
 
@@ -19,7 +28,7 @@ class ECardApp:
         self.root = root
         self.root.title("E-Card Game - Kaiji Style")
         # Store both PIL and Tk images for animation
-        self.pil_images = {name: Image.open(path).resize((120, 180)) for name, path in card_paths.items()}
+        self.pil_images = {name: Image.open(resource_path(path)).resize((120, 180)) for name, path in card_paths.items()}
         self.card_images = {name: ImageTk.PhotoImage(self.pil_images[name]) for name in card_paths}
         self.player_score = 0
         self.cpu_score = 0
@@ -28,12 +37,12 @@ class ECardApp:
         pygame.mixer.init()
         pygame.mixer.set_num_channels(8)
         self.sounds = {
-            'theme': 'theme.wav',
-            'flip': 'flip.wav',
-            'win': 'win.wav',
-            'lose': 'lose.wav',
-            'draw': 'draw.wav',
-            'click': 'click.wav',
+            'theme': resource_path('theme.wav'),
+            'flip': resource_path('flip.wav'),
+            'win': resource_path('win.wav'),
+            'lose': resource_path('lose.wav'),
+            'draw': resource_path('draw.wav'),
+            'click': resource_path('click.wav'),
         }
         self.sound_effects = {}
         self.theme_volume = 0.5
@@ -420,13 +429,14 @@ class ECardGame:
             self.game_over = True
         else:
             self.update_sidebar()
-            self.show_result_banner("⚖️ Draw! Continue to next round...", "#FFD700")
-            self.play_sound('draw')
-        if not self.player_hand or not self.cpu_hand:
-            self.show_result_banner("🃏 All cards used. It's a draw.", "#888")
-            self.play_sound('draw')
-            self.show_new_game_button()
-            self.game_over = True
+            if not self.player_hand or not self.cpu_hand:
+                self.show_result_banner("🃏 All cards used. It's a draw.", "#888")
+                self.play_sound('draw')
+                self.show_new_game_button()
+                self.game_over = True
+            else:
+                self.show_result_banner("⚖️ Draw! Continue to next round...", "#FFD700")
+                self.play_sound('draw')
 
     def determine_winner(self, card1, card2):
         rules = {
