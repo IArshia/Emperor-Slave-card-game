@@ -5,10 +5,10 @@ import random
 
 # Paths to card images
 card_paths = {
-    "Emperor": r"D:\projects\E card\emperor.jpg",
-    "Citizen": r"D:\projects\E card\citizen.jpg",
-    "Slave": r"D:\projects\E card\slave.jpg",
-    "Back": r"D:\projects\E card\back.jpg"
+    "Emperor": r"D:\projects\Emperor-Slave-card-game\emperor.jpg",
+    "Citizen": r"D:\projects\Emperor-Slave-card-game\citizen.jpg",
+    "Slave": r"D:\projects\Emperor-Slave-card-game\slave.jpg",
+    "Back": r"D:\projects\Emperor-Slave-card-game\back.jpg"
 }
 
 
@@ -16,7 +16,9 @@ class ECardApp:
     def __init__(self, root):
         self.root = root
         self.root.title("E-Card Game - Kaiji Style")
-        self.card_images = {name: ImageTk.PhotoImage(Image.open(path).resize((120, 180))) for name, path in card_paths.items()}
+        # Store both PIL and Tk images for animation
+        self.pil_images = {name: Image.open(path).resize((120, 180)) for name, path in card_paths.items()}
+        self.card_images = {name: ImageTk.PhotoImage(self.pil_images[name]) for name in card_paths}
         self.show_role_selection()
 
     def show_role_selection(self):
@@ -50,6 +52,7 @@ class ECardGame:
         self.app = app
         self.cpu_role = "Slave" if role == "Emperor" else "Emperor"
         self.card_images = card_images
+        self.pil_images = app.pil_images  # Access PIL images for animation
 
         self.player_hand = self.init_hand(self.role)
         self.cpu_hand = self.init_hand(self.cpu_role)
@@ -134,7 +137,7 @@ class ECardGame:
             messagebox.showinfo("Error", "Card already used!")
             return
 
-        # Remove cards
+        # Remove card
         self.player_hand.remove(player_choice)
         self.chosen_player_card = player_choice
 
@@ -148,20 +151,55 @@ class ECardGame:
 
         self.root.after(1000, self.reveal_cards)
 
+    def flip_card_animation(self, slot_label, from_card, to_card, callback=None, steps=8, delay=30):
+        # Animate a card flip from 'from_card' to 'to_card' on the given slot_label
+        # Shrink, swap, expand
+        pil_from = self.pil_images[from_card]
+        pil_to = self.pil_images[to_card]
+        w, h = pil_from.size
+        images = []
+        # Shrink phase
+        for i in range(steps):
+            scale = 1 - (i / steps)
+            new_w = max(1, int(w * scale))
+            img = pil_from.resize((new_w, h))
+            images.append(ImageTk.PhotoImage(img))
+        # Expand phase (after swap)
+        for i in range(steps):
+            scale = (i + 1) / steps
+            new_w = max(1, int(w * scale))
+            img = pil_to.resize((new_w, h))
+            images.append(ImageTk.PhotoImage(img))
+        def animate(idx=0):
+            if idx < len(images):
+                slot_label.config(image=images[idx])
+                slot_label.image = images[idx]  # Prevent garbage collection
+                self.root.after(delay, lambda: animate(idx + 1))
+            else:
+                slot_label.config(image=self.card_images[to_card])
+                slot_label.image = self.card_images[to_card]
+                if callback:
+                    callback()
+        animate()
+
     def reveal_cards(self):
-        # Show real cards
-        self.player_card_slot.config(image=self.card_images[self.chosen_player_card])
-        self.cpu_card_slot.config(image=self.card_images[self.chosen_cpu_card])
-
-        self.result_label.config(
-            text=f"You played: {self.chosen_player_card} | CPU played: {self.chosen_cpu_card}"
+        # Animate both flips, then update result and sidebar
+        def after_both():
+            self.result_label.config(
+                text=f"You played: {self.chosen_player_card} | CPU played: {self.chosen_cpu_card}"
+            )
+            self.history.append((self.chosen_player_card, self.chosen_cpu_card))
+            self.update_sidebar()
+            winner = self.determine_winner(self.chosen_player_card, self.chosen_cpu_card)
+            self.root.after(1000, lambda: self.show_result(winner))
+        # Animate player, then CPU, then call after_both
+        def flip_cpu():
+            self.flip_card_animation(
+                self.cpu_card_slot, "Back", self.chosen_cpu_card, after_both
+            )
+        self.flip_card_animation(
+            self.player_card_slot, "Back", self.chosen_player_card, flip_cpu
         )
-
-        self.history.append((self.chosen_player_card, self.chosen_cpu_card))
-        self.update_sidebar()
-
-        winner = self.determine_winner(self.chosen_player_card, self.chosen_cpu_card)
-        self.root.after(1000, lambda: self.show_result(winner))
 
     def show_result(self, winner):
         if winner == "Player":
