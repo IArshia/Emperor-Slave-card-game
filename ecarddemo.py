@@ -62,35 +62,38 @@ class ECardGame:
         self.history = []
 
         # Main layout frames
-        self.main_frame = tk.Frame(root)
-        self.main_frame.pack(side="left", padx=10)
+        self.main_frame = tk.Frame(root, bg="#145a32", bd=4, relief="ridge")  # Green felt background
+        self.main_frame.pack(side="left", padx=20, pady=20, ipadx=10, ipady=10)
 
         self.sidebar = tk.Frame(root)
         self.sidebar.pack(side="right", padx=10, fill="y")
 
-        self.label = tk.Label(self.main_frame, text=f"You are playing as: {self.role}", font=("Arial", 14))
+        self.label = tk.Label(self.main_frame, text=f"You are playing as: {self.role}", font=("Arial", 14), bg="#145a32", fg="white")
         self.label.pack(pady=10)
 
         # Table layout
-        self.table_frame = tk.Frame(self.main_frame)
-        self.table_frame.pack(pady=10)
+        self.table_frame = tk.Frame(self.main_frame, bg="#145a32")
+        self.table_frame.pack(pady=30)
 
-        self.cpu_card_slot = tk.Label(self.table_frame, image=self.card_images["Back"])
-        self.cpu_card_slot.grid(row=0, column=1, padx=10)
+        # CPU played card (top center)
+        self.cpu_card_slot = tk.Label(self.table_frame, image=self.card_images["Back"], bg="#145a32", bd=3, relief="groove")
+        self.cpu_card_slot.grid(row=0, column=1, padx=30, pady=(0, 10))
 
-        self.vs_label = tk.Label(self.table_frame, text="VS", font=("Arial", 16, "bold"))
-        self.vs_label.grid(row=1, column=1)
+        # VS label (large, prominent)
+        self.vs_label = tk.Label(self.table_frame, text="VS", font=("Arial", 28, "bold"), bg="#145a32", fg="#FFD700")
+        self.vs_label.grid(row=1, column=1, pady=10)
 
-        self.player_card_slot = tk.Label(self.table_frame, image=self.card_images["Back"])
-        self.player_card_slot.grid(row=2, column=1, padx=10)
+        # Player played card (bottom center)
+        self.player_card_slot = tk.Label(self.table_frame, image=self.card_images["Back"], bg="#145a32", bd=3, relief="groove")
+        self.player_card_slot.grid(row=2, column=1, padx=30, pady=(10, 0))
+
+        self.result_label = tk.Label(self.main_frame, text="", font=("Arial", 12), bg="#145a32", fg="white")
+        self.result_label.pack(pady=10)
 
         self.button_frame = tk.Frame(self.main_frame)
         self.button_frame.pack(pady=10)
 
-        self.result_label = tk.Label(self.main_frame, text="", font=("Arial", 12))
-        self.result_label.pack(pady=10)
-
-        self.create_card_buttons()
+        self.create_player_hand()  # New method for hand layout
         self.create_sidebar()
 
     def init_hand(self, role):
@@ -99,14 +102,56 @@ class ECardGame:
         else:
             return ["Slave"] + ["Citizen"] * 4
 
-    def create_card_buttons(self):
-        for card_name in set(self.player_hand):
-            btn = tk.Button(
-                self.button_frame,
+    def create_player_hand(self):
+        # Remove old button_frame if it exists
+        if hasattr(self, 'button_frame'):
+            self.button_frame.destroy()
+        self.hand_frame = tk.Frame(self.main_frame, bg="#2e2e2e")
+        self.hand_frame.pack(pady=20)
+        self.card_labels = []
+        # Arrange cards in a row, allow duplicates
+        for idx, card_name in enumerate(self.player_hand):
+            lbl = tk.Label(
+                self.hand_frame,
                 image=self.card_images[card_name],
-                command=lambda c=card_name: self.play_round(c)
+                bd=4,  # Always reserve max border
+                relief="flat",
+                bg="#2e2e2e",
+                highlightthickness=2,  # Always reserve max highlight
+                highlightbackground="#2e2e2e",
+                highlightcolor="#2e2e2e"
             )
-            btn.pack(side="left", padx=10)
+            lbl.grid(row=0, column=idx, padx=8)
+            setattr(lbl, 'card_name', card_name)
+            # Hover highlight (only change color/relief)
+            lbl.bind("<Enter>", lambda e, l=lbl: l.config(relief="solid", highlightbackground="#FFD700", highlightcolor="#FFD700", bg="#393e46"))
+            lbl.bind("<Leave>", lambda e, l=lbl: l.config(relief="flat", highlightbackground="#2e2e2e", highlightcolor="#2e2e2e", bg="#2e2e2e"))
+            # Click to play
+            lbl.bind("<Button-1>", lambda e, c=card_name: self.play_round(c))
+            self.card_labels.append(lbl)
+
+    def update_player_hand(self):
+        # Refresh the hand display after a card is played
+        for lbl in self.card_labels:
+            lbl.destroy()
+        self.card_labels = []
+        for idx, card_name in enumerate(self.player_hand):
+            lbl = tk.Label(
+                self.hand_frame,
+                image=self.card_images[card_name],
+                bd=4,
+                relief="flat",
+                bg="#2e2e2e",
+                highlightthickness=2,
+                highlightbackground="#2e2e2e",
+                highlightcolor="#2e2e2e"
+            )
+            lbl.grid(row=0, column=idx, padx=8)
+            setattr(lbl, 'card_name', card_name)
+            lbl.bind("<Enter>", lambda e, l=lbl: l.config(relief="solid", highlightbackground="#FFD700", highlightcolor="#FFD700", bg="#393e46"))
+            lbl.bind("<Leave>", lambda e, l=lbl: l.config(relief="flat", highlightbackground="#2e2e2e", highlightcolor="#2e2e2e", bg="#2e2e2e"))
+            lbl.bind("<Button-1>", lambda e, c=card_name: self.play_round(c))
+            self.card_labels.append(lbl)
 
     def create_sidebar(self):
         tk.Label(self.sidebar, text="Card Status", font=("Arial", 14, "bold")).pack()
@@ -136,19 +181,14 @@ class ECardGame:
         if player_choice not in self.player_hand:
             messagebox.showinfo("Error", "Card already used!")
             return
-
-        # Remove card
         self.player_hand.remove(player_choice)
         self.chosen_player_card = player_choice
-
         self.chosen_cpu_card = random.choice(self.cpu_hand)
         self.cpu_hand.remove(self.chosen_cpu_card)
-
-        # Show back first
         self.player_card_slot.config(image=self.card_images["Back"])
         self.cpu_card_slot.config(image=self.card_images["Back"])
         self.result_label.config(text="Cards placed... flipping!")
-
+        self.update_player_hand()  # Refresh hand after play
         self.root.after(1000, self.reveal_cards)
 
     def flip_card_animation(self, slot_label, from_card, to_card, callback=None, steps=8, delay=30):
