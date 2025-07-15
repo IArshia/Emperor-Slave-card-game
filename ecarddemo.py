@@ -3,6 +3,7 @@ from tkinter import messagebox
 from PIL import Image, ImageTk
 import random
 import winsound
+import pygame
 
 # Paths to card images
 card_paths = {
@@ -22,7 +23,61 @@ class ECardApp:
         self.card_images = {name: ImageTk.PhotoImage(self.pil_images[name]) for name in card_paths}
         self.player_score = 0
         self.cpu_score = 0
+        self.theme_muted = False
+        self.theme_playing = False
+        pygame.mixer.init()
+        pygame.mixer.set_num_channels(8)
+        self.sounds = {
+            'theme': 'theme.wav',
+            'flip': 'flip.wav',
+            'win': 'win.wav',
+            'lose': 'lose.wav',
+            'draw': 'draw.wav',
+            'click': 'click.wav',
+        }
+        self.sound_effects = {}
+        self.theme_volume = 0.5
+        self.effects_volume = 1.0
+        for k, v in self.sounds.items():
+            if k != 'theme':
+                try:
+                    s = pygame.mixer.Sound(v)
+                    s.set_volume(self.effects_volume)
+                    self.sound_effects[k] = s
+                except Exception:
+                    pass
+        self.play_theme_sound()
         self.show_role_selection()
+
+    def play_click_sound(self):
+        try:
+            self.sound_effects['click'].play()
+        except Exception as e:
+            pass
+
+    def play_theme_sound(self):
+        if not self.theme_muted:
+            try:
+                pygame.mixer.music.load(self.sounds['theme'])
+                pygame.mixer.music.set_volume(self.theme_volume)
+                pygame.mixer.music.play(-1)
+                self.theme_playing = True
+            except Exception:
+                pass
+
+    def stop_theme_sound(self):
+        try:
+            pygame.mixer.music.stop()
+            self.theme_playing = False
+        except Exception:
+            pass
+
+    def toggle_theme_sound(self):
+        self.theme_muted = not self.theme_muted
+        if self.theme_muted:
+            self.stop_theme_sound()
+        else:
+            self.play_theme_sound()
 
     def show_role_selection(self):
         self.clear_screen()
@@ -48,7 +103,7 @@ class ECardApp:
         emperor_btn.grid(row=0, column=0, padx=40)
         emperor_btn.bind("<Enter>", lambda e: emperor_btn.config(bg="#333"))
         emperor_btn.bind("<Leave>", lambda e: emperor_btn.config(bg="#222"))
-        emperor_btn.bind("<Button-1>", lambda e: (self.game.play_sound('click.wav') if hasattr(self, 'game') else None, self.start_game("Emperor", self.player_score, self.cpu_score)))
+        emperor_btn.bind("<Button-1>", lambda e: (self.play_click_sound(), self.start_game("Emperor", self.player_score, self.cpu_score)))
 
         # Slave button
         slave_img = self.card_images["Slave"]
@@ -58,7 +113,7 @@ class ECardApp:
         slave_btn.grid(row=0, column=1, padx=40)
         slave_btn.bind("<Enter>", lambda e: slave_btn.config(bg="#333"))
         slave_btn.bind("<Leave>", lambda e: slave_btn.config(bg="#222"))
-        slave_btn.bind("<Button-1>", lambda e: (self.game.play_sound('click.wav') if hasattr(self, 'game') else None, self.start_game("Slave", self.player_score, self.cpu_score)))
+        slave_btn.bind("<Button-1>", lambda e: (self.play_click_sound(), self.start_game("Slave", self.player_score, self.cpu_score)))
 
     def start_game(self, role, player_score=0, cpu_score=0):
         self.clear_screen()
@@ -184,6 +239,24 @@ class ECardGame:
             self.card_labels.append(lbl)
 
     def create_sidebar(self):
+        # (Mute button removed; use sound panel instead)
+        # Sound settings button (restyled, full width, gold accent, top of sidebar)
+        self.sound_settings_btn = tk.Button(
+            self.sidebar,
+            text="🎚️ Sound Settings",
+            font=("Arial", 12, "bold"),
+            command=self.open_sound_panel,
+            bg="#222",
+            fg="#FFD700",
+            bd=2,
+            relief="ridge",
+            highlightthickness=0,
+            activebackground="#FFD700",
+            activeforeground="#222"
+        )
+        self.sound_settings_btn.pack(anchor="ne", fill="x", padx=8, pady=(8, 8))
+        self.sound_settings_btn.bind("<Enter>", lambda e: self.sound_settings_btn.config(bg="#333"))
+        self.sound_settings_btn.bind("<Leave>", lambda e: self.sound_settings_btn.config(bg="#222"))
         # Scoreboard badge
         self.score_label = tk.Label(
             self.sidebar,
@@ -203,11 +276,11 @@ class ECardGame:
         btn_group = tk.Frame(self.sidebar, bg="#f5f5f5")
         btn_group.pack(pady=(0, 18), fill="x")
         btn_style = {"font": ("Arial", 11), "bg": "#fff", "fg": "#333", "activebackground": "#FFD700", "activeforeground": "#222", "relief": "groove", "bd": 2, "padx": 8, "pady": 4, "highlightthickness": 0}
-        self.reset_score_btn = tk.Button(btn_group, text="Reset Score", command=lambda: (self.play_sound('click.wav'), self.reset_score()), **btn_style)
+        self.reset_score_btn = tk.Button(btn_group, text="Reset Score", command=lambda: (self.play_sound('click'), self.reset_score()), **btn_style)
         self.reset_score_btn.pack(side="left", padx=4, pady=6)
-        self.clear_history_btn = tk.Button(btn_group, text="Clear History", command=lambda: (self.play_sound('click.wav'), self.clear_history()), **btn_style)
+        self.clear_history_btn = tk.Button(btn_group, text="Clear History", command=lambda: (self.play_sound('click'), self.clear_history()), **btn_style)
         self.clear_history_btn.pack(side="left", padx=4, pady=6)
-        self.change_role_btn = tk.Button(btn_group, text="Change Role", command=lambda: (self.play_sound('click.wav'), self.change_role()), **btn_style)
+        self.change_role_btn = tk.Button(btn_group, text="Change Role", command=lambda: (self.play_sound('click'), self.change_role()), **btn_style)
         self.change_role_btn.pack(side="left", padx=4, pady=6)
 
         # Card status
@@ -252,10 +325,10 @@ class ECardGame:
             self.history_text.insert("end", f"Round {i}: You → {p:<8} | CPU → {c:<8}\n")
         self.history_text.config(state="disabled")
 
-    def play_sound(self, filename):
+    def play_sound(self, key):
         try:
-            winsound.PlaySound(filename, winsound.SND_FILENAME | winsound.SND_ASYNC)
-        except Exception:
+            self.app.sound_effects[key].play()
+        except Exception as e:
             pass
 
     def play_round(self, player_choice):
@@ -272,7 +345,7 @@ class ECardGame:
         self.cpu_card_slot.config(image=self.card_images["Back"])
         self.result_label.config(text="Cards placed... flipping!")
         self.update_player_hand()  # Refresh hand after play
-        self.play_sound('flip.wav')
+        self.play_sound('flip')
         self.root.after(1000, self.reveal_cards)
 
     def flip_card_animation(self, slot_label, from_card, to_card, callback=None, steps=8, delay=30):
@@ -302,7 +375,7 @@ class ECardGame:
             else:
                 slot_label.config(image=self.card_images[to_card])
                 slot_label.image = self.card_images[to_card]
-                self.play_sound('flip.wav')
+                self.play_sound('flip')
                 if callback:
                     callback()
         animate()
@@ -334,7 +407,7 @@ class ECardGame:
             self.app.player_score = self.player_score
             self.update_sidebar()
             self.show_result_banner("🎉 You win the game!", "#27ae60")
-            self.play_sound('win.wav')
+            self.play_sound('win')
             self.show_new_game_button()
             self.game_over = True
         elif winner == "CPU":
@@ -342,16 +415,16 @@ class ECardGame:
             self.app.cpu_score = self.cpu_score
             self.update_sidebar()
             self.show_result_banner("💀 CPU wins the game!", "#c0392b")
-            self.play_sound('lose.wav')
+            self.play_sound('lose')
             self.show_new_game_button()
             self.game_over = True
         else:
             self.update_sidebar()
             self.show_result_banner("⚖️ Draw! Continue to next round...", "#FFD700")
-            self.play_sound('draw.wav')
+            self.play_sound('draw')
         if not self.player_hand or not self.cpu_hand:
             self.show_result_banner("🃏 All cards used. It's a draw.", "#888")
-            self.play_sound('draw.wav')
+            self.play_sound('draw')
             self.show_new_game_button()
             self.game_over = True
 
@@ -374,7 +447,7 @@ class ECardGame:
 
     def show_new_game_button(self):
         btn = tk.Button(self.main_frame, text="Play Again", font=("Arial", 12, "bold"), bg="#4CAF50", fg="white",
-                        command=lambda: (self.play_sound('click.wav'), self.play_again()))
+                        command=lambda: (self.play_sound('click'), self.play_again()))
         btn.pack(pady=20)
 
     def play_again(self):
@@ -385,6 +458,34 @@ class ECardGame:
     def show_result_banner(self, text, color):
         self.result_banner.config(text=text, fg=color, bg="#222")
         self.result_banner.after(2500, lambda: self.result_banner.config(text=""))
+
+    def open_sound_panel(self):
+        panel = tk.Toplevel(self.root)
+        panel.title("Sound Settings")
+        panel.geometry("320x180")
+        panel.resizable(False, False)
+        tk.Label(panel, text="Theme Volume", font=("Arial", 12, "bold")).pack(pady=(18, 2))
+        theme_slider = tk.Scale(panel, from_=0, to=100, orient="horizontal", resolution=1, length=220)
+        theme_slider.set(int(self.app.theme_volume * 100))
+        theme_slider.pack()
+        tk.Label(panel, text="Effects Volume", font=("Arial", 12, "bold")).pack(pady=(18, 2))
+        effects_slider = tk.Scale(panel, from_=0, to=100, orient="horizontal", resolution=1, length=220)
+        effects_slider.set(int(self.app.effects_volume * 100))
+        effects_slider.pack()
+
+        def update_theme_volume(val):
+            v = int(val) / 100
+            self.app.theme_volume = v
+            pygame.mixer.music.set_volume(v)
+
+        def update_effects_volume(val):
+            v = int(val) / 100
+            self.app.effects_volume = v
+            for s in self.app.sound_effects.values():
+                s.set_volume(v)
+
+        theme_slider.config(command=update_theme_volume)
+        effects_slider.config(command=update_effects_volume)
 
 
 if __name__ == "__main__":
